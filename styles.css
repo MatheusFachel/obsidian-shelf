@@ -1,0 +1,193 @@
+/*
+ * Shelf plugin styles.
+ *
+ * Every class is prefixed with `shelf-` to avoid collisions with themes and
+ * other plugins. Colours and spacing come from Obsidian's own CSS variables
+ * so the plugin blends with whatever theme the user has active.
+ */
+
+.shelf-view {
+	padding: var(--size-4-3);
+}
+
+/* --- Shelf bar (horizontal row of shelf icons) ---------------------------- */
+
+.shelf-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--size-2-2);
+	padding-bottom: var(--size-4-2);
+	margin-bottom: var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.shelf-bar-item {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-s);
+	background-color: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.shelf-bar-item:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.shelf-bar-item.is-active {
+	background-color: var(--background-modifier-active-hover);
+	color: var(--text-accent);
+}
+
+.shelf-bar-item-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.shelf-bar-add {
+	color: var(--text-faint);
+}
+
+.shelf-icon-emoji {
+	font-size: 18px;
+	line-height: 1;
+}
+
+/* --- Header for the active shelf ----------------------------------------- */
+
+.shelf-view-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--size-2-2);
+	margin-bottom: var(--size-4-2);
+}
+
+.shelf-view-header-title {
+	margin: 0;
+	font-size: var(--font-ui-medium);
+	font-weight: var(--font-semibold);
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.shelf-view-header-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-s);
+	background-color: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.shelf-view-header-action:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* --- Empty state ---------------------------------------------------------- */
+
+.shelf-view-empty {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-2);
+	padding: var(--size-4-4) var(--size-4-2);
+	color: var(--text-muted);
+	text-align: center;
+}
+
+.shelf-view-empty-title {
+	margin: 0;
+	font-size: var(--font-ui-medium);
+	font-weight: var(--font-semibold);
+	color: var(--text-normal);
+}
+
+.shelf-view-empty-hint {
+	margin: 0;
+	font-size: var(--font-ui-small);
+	line-height: var(--line-height-tight);
+}
+
+/* --- Tree (folders + files for the active shelf) ------------------------ */
+
+.shelf-tree {
+	display: flex;
+	flex-direction: column;
+}
+
+.shelf-tree-item-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	padding: var(--size-2-1) var(--size-2-2);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	user-select: none;
+}
+
+.shelf-tree-item.is-folder > .shelf-tree-item-row,
+.shelf-tree-item.is-file > .shelf-tree-item-row {
+	padding-left: calc(var(--shelf-depth, 0) * 16px);
+}
+
+.shelf-tree-item-row:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.shelf-tree-item:focus-visible > .shelf-tree-item-row {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -2px;
+}
+
+.shelf-tree-item-chevron,
+.shelf-tree-item-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+.shelf-tree-item-chevron .svg-icon,
+.shelf-tree-item-icon .svg-icon {
+	width: 14px;
+	height: 14px;
+}
+
+.shelf-tree-item-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.shelf-tree-item.is-file .shelf-tree-item-icon {
+	color: var(--text-faint);
+}
+
+.shelf-tree-item.is-missing .shelf-tree-item-row {
+	color: var(--text-error);
+	cursor: default;
+}
+
+.shelf-tree-item.is-missing .shelf-tree-item-icon {
+	color: var(--text-error);
+}
