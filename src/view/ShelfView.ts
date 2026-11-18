@@ -1,6 +1,7 @@
 import { ItemView, setIcon, WorkspaceLeaf } from 'obsidian';
 import { SHELF_VIEW_ICON, SHELF_VIEW_LABEL, SHELF_VIEW_TYPE } from '../constants';
 import { AddFolderModal } from '../modals/AddFolderModal';
+import { openQuickNote } from '../modals/QuickNoteFolderModal';
 import type { ShelfManager } from '../services/ShelfManager';
 import type { Shelf } from '../types';
 import { ShelfBar } from './ShelfBar';
@@ -52,6 +53,11 @@ export class ShelfView extends ItemView {
 
 	getIcon(): string {
 		return SHELF_VIEW_ICON;
+	}
+
+	/** Show the destination folder and new note after a command creates one. */
+	revealFolder(path: string): void {
+		this.shelfTree.expandFolder(path);
 	}
 
 	// --- Lifecycle ---------------------------------------------------------
@@ -112,7 +118,8 @@ export class ShelfView extends ItemView {
 			cls: 'shelf-view-header-title',
 		});
 
-		const addBtn = header.createEl('button', {
+		const actions = header.createDiv({ cls: 'shelf-view-header-actions' });
+		const addBtn = actions.createEl('button', {
 			cls: 'shelf-view-header-action',
 			attr: {
 				type: 'button',
@@ -125,6 +132,19 @@ export class ShelfView extends ItemView {
 
 		addBtn.addEventListener('click', () => {
 			new AddFolderModal(this.app, this.shelfManager, shelf).open();
+		});
+
+		const quickBtn = actions.createEl('button', {
+			cls: 'shelf-view-header-action',
+			attr: {
+				type: 'button',
+				'aria-label': 'Quick note in shelf',
+				title: 'Quick note in shelf',
+			},
+		});
+		setIcon(quickBtn, 'file-plus');
+		quickBtn.addEventListener('click', () => {
+			openQuickNote(this.app, this.shelfManager, (path) => this.revealFolder(path));
 		});
 	}
 

@@ -8,10 +8,8 @@ import { setIcon } from 'obsidian';
  *   - Emojis, either as a raw unicode string (`"📚"`) or with the `emoji:` prefix
  *     (`"emoji:📚"`).
  *
- * Anything else — including namespaced icons from third-party packs the Notebook
- * Navigator plugin supports (`"phosphor:book-open"`, `"material-icons:folder"`, …)
- * — falls back to a generic folder icon. Layer 2 (reading those packs from NN's
- * IndexedDB) is a Phase 3 task per the design doc.
+ * Registered third-party icon IDs are passed to Obsidian as-is. Unknown IDs
+ * fall back to a bare name, then to the generic folder icon.
  */
 
 const EMOJI_PREFIX = 'emoji:';
@@ -21,6 +19,7 @@ export function renderIcon(
 	icon: string | null | undefined,
 ): void {
 	container.empty();
+	container.removeClass('shelf-icon-emoji');
 
 	if (!icon || icon.trim() === '') {
 		setIcon(container, 'folder');
@@ -41,14 +40,11 @@ export function renderIcon(
 		return;
 	}
 
-	// Namespaced icon from a third-party pack (NN-style "phosphor:book-open").
-	// We can't render those in layer 1 — strip the namespace and try the bare
-	// name as a Lucide id; if that fails too, fall back to "folder".
-	const lucideName = icon.includes(':')
-		? (icon.split(':')[1] ?? icon)
-		: icon;
-
-	setIcon(container, lucideName);
+	// Registered icons may include a namespace supplied by another plugin.
+	setIcon(container, icon);
+	if (container.children.length === 0 && icon.includes(':')) {
+		setIcon(container, icon.split(':')[1] ?? icon);
+	}
 
 	// `setIcon` is silent on unknown names — it just doesn't append an SVG.
 	// Detect that and fall back so we never end up with an empty button.

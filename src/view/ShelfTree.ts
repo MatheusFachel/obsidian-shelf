@@ -1,11 +1,16 @@
-import { App, Menu, setIcon, TAbstractFile, TFile, TFolder } from 'obsidian';
+import { App, Menu, Notice, setIcon, TAbstractFile, TFile, TFolder } from 'obsidian';
+import { CreateVaultItemModal } from '../modals/CreateVaultItemModal';
+import { createQuickNote } from '../modals/QuickNoteFolderModal';
 import { DeleteFileModal } from '../modals/DeleteFileModal';
 import { RenameFileModal } from '../modals/RenameFileModal';
 import type { ShelfManager } from '../services/ShelfManager';
 import type { Shelf } from '../types';
+import { openShelfGallery } from './openShelfGallery';
 
 /** Source string passed to Obsidian's `file-menu` event so other plugins can identify us. */
 const MENU_SOURCE = 'shelf-tree-context-menu';
+const FOLDER_DRAG_TYPE = 'application/x-obsidian-shelf-folder';
+const FOLDER_SHELF_TYPE = 'application/x-obsidian-shelf-folder-owner';
 
 /**
  * Tree of folders + files for the active shelf.
@@ -77,6 +82,12 @@ export class ShelfTree {
 		return true;
 	}
 
+	/** Reveal a linked folder after a quick note is created inside it. */
+	expandFolder(path: string): void {
+		this.expanded.add(path);
+		this.refresh();
+	}
+
 	/** Re-render the tree into its existing root, without touching the parent view. */
 	private refresh(): void {
 		const root = this.root;
@@ -138,6 +149,21 @@ export class ShelfTree {
 			cls: 'shelf-tree-item-name',
 			text: folder.name || folder.path,
 		});
+		const galleryButton = row.createEl('button', {
+			cls: 'shelf-tree-gallery-action',
+			attr: {
+				type: 'button',
+				'aria-label': `Open ${folder.name} as gallery`,
+				title: 'Open as gallery',
+				tabindex: '-1',
+			},
+		});
+		setIcon(galleryButton, 'image');
+		galleryButton.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			void openShelfGallery(this.app, folder.path);
+		});
 
 		row.addEventListener('click', () => {
 			this.focusItem(item);
@@ -150,6 +176,7 @@ export class ShelfTree {
 		});
 
 		this.bindContextMenu(item, (source) => this.showFolderMenu(source, folder, isLinkedRoot));
+		if (isLinkedRoot) this.bindRootDrag(item, folder);
 
 		if (isExpanded) {
 			const children = item.createDiv({ cls: 'shelf-tree-item-children' });
@@ -339,9 +366,52 @@ export class ShelfTree {
 		isLinkedRoot: boolean,
 	): void {
 		const menu = new Menu();
+		menu.addItem((item) =>
+			item.setTitle('Open as gallery').setIcon('image').onClick(() => {
+				void openShelfGallery(this.app, folder.path);
+			}),
+		);
+		menu.addSeparator();
 
 		// Our own "essentials" — the file-menu event doesn't carry these items,
 		// since the native file explorer adds them directly to its own menu.
+		menu.addItem((item) =>
+			item
+				.setTitle('New note')
+				.setIcon('file-plus')
+				.onClick(() => {
+					new CreateVaultItemModal(this.app, folder, 'note', () => {
+						this.expanded.add(folder.path);
+						this.refresh();
+					}).open();
+				}),
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Quick note')
+				.setIcon('zap')
+				.onClick(() => {
+					void createQuickNote(this.app, folder, () => {
+						this.expanded.add(folder.path);
+						this.refresh();
+					});
+				}),
+		);
+
+		menu.addItem((item) =>
+			item
+				.setTitle('New folder')
+				.setIcon('folder-plus')
+				.onClick(() => {
+					new CreateVaultItemModal(this.app, folder, 'folder', () => {
+						this.expanded.add(folder.path);
+						this.refresh();
+					}).open();
+				}),
+		);
+
+		menu.addSeparator();
+
 		menu.addItem((item) =>
 			item
 				.setTitle('Rename…')
@@ -370,6 +440,21 @@ export class ShelfTree {
 			const activeId = this.shelfManager.getActiveShelfId();
 			if (activeId !== null) {
 				menu.addSeparator();
+				const roots = this.shelfManager.getShelf(activeId)?.folders ?? [];
+				const index = roots.findIndex((root) => root.path === folder.path);
+				const previous = roots[index - 1];
+				const next = roots[index + 1];
+				if (previous) menu.addItem((item) =>
+					item.setTitle('Move up').setIcon('arrow-up').onClick(() => {
+						void this.moveLinkedRoot(activeId, folder.path, previous.path, false);
+					}),
+				);
+				if (next) menu.addItem((item) =>
+					item.setTitle('Move down').setIcon('arrow-down').onClick(() => {
+						void this.moveLinkedRoot(activeId, folder.path, next.path, true);
+					}),
+				);
+				if (previous || next) menu.addSeparator();
 				menu.addItem((item) =>
 					item
 						.setTitle('Remove from shelf')
@@ -467,6 +552,59 @@ export class ShelfTree {
 		} else {
 			const rect = source.getBoundingClientRect();
 			menu.showAtPosition({ x: rect.left, y: rect.bottom }, source.ownerDocument);
+		}
+	}
+
+	/** Dragging a linked root changes only its order in this shelf. */
+	private bindRootDrag(item: HTMLElement, folder: TFolder): void {
+		const row = item.querySelector<HTMLElement>(':scope > .shelf-tree-item-row');
+		if (!row) return;
+		row.draggable = true;
+		row.setAttribute('title', 'Drag to reorder linked folders');
+		row.addEventListener('dragstart', (event) => {
+			if (!event.dataTransfer) return;
+			const shelfId = this.currentShelf?.id;
+			if (!shelfId) return;
+			event.dataTransfer.setData(FOLDER_DRAG_TYPE, folder.path);
+			event.dataTransfer.setData(FOLDER_SHELF_TYPE, shelfId);
+			event.dataTransfer.effectAllowed = 'move';
+			event.stopPropagation();
+		});
+		row.addEventListener('dragover', (event) => {
+			if (!event.dataTransfer?.types.includes(FOLDER_DRAG_TYPE) ||
+				(event.target instanceof HTMLElement && event.target.closest('[role="treeitem"]') !== item)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			event.dataTransfer.dropEffect = 'move';
+			const after = event.clientY > row.getBoundingClientRect().top + row.clientHeight / 2;
+			row.toggleClass('shelf-drop-before', !after);
+			row.toggleClass('shelf-drop-after', after);
+		});
+		row.addEventListener('dragleave', () => {
+			row.removeClass('shelf-drop-before', 'shelf-drop-after');
+		});
+		row.addEventListener('drop', (event) => {
+			row.removeClass('shelf-drop-before', 'shelf-drop-after');
+			if (!event.dataTransfer?.types.includes(FOLDER_DRAG_TYPE) ||
+				(event.target instanceof HTMLElement && event.target.closest('[role="treeitem"]') !== item)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const shelfId = this.currentShelf?.id;
+			if (!shelfId || event.dataTransfer.getData(FOLDER_SHELF_TYPE) !== shelfId) return;
+			const path = event.dataTransfer.getData(FOLDER_DRAG_TYPE);
+			const after = event.clientY > row.getBoundingClientRect().top + row.clientHeight / 2;
+			if (path) void this.moveLinkedRoot(shelfId, path, folder.path, after);
+		});
+	}
+
+	private async moveLinkedRoot(
+		shelfId: string, path: string, targetPath: string, after: boolean,
+	): Promise<void> {
+		try {
+			await this.shelfManager.moveLinkedFolder(shelfId, path, targetPath, after);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			new Notice(message);
 		}
 	}
 

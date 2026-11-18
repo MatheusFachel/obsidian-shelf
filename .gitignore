@@ -23,7 +23,6 @@ data.json
 # Local development notes and machine-specific state
 /HANDOFF.md
 /.claude/settings.local.json
-/UsersResTIC55DocumentsCofre de Teste para Desenvolvimento do Plugin.obsidianpluginsshelf
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store

@@ -26,7 +26,7 @@ export class DeleteFileModal extends Modal {
 			.addButton((button) => {
 				button
 					.setButtonText('Delete')
-					.setWarning()
+					.setClass('shelf-delete-warning')
 					.onClick(() => {
 						if (this.deleting) return;
 						this.deleting = true;

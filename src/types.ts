@@ -28,14 +28,7 @@ export interface Shelf {
 	/** Display name shown in tooltips and the view header. */
 	name: string;
 
-	/**
-	 * Icon identifier. Accepted formats:
-	 *  - Lucide name, e.g. `"folder-open"` (rendered via Obsidian's `setIcon`)
-	 *  - Emoji with prefix, e.g. `"emoji:📚"`
-	 *  - Raw unicode emoji, e.g. `"📚"`
-	 *  - Namespaced icon from a third-party pack, e.g. `"phosphor:book-open"`
-	 *    (only rendered if Notebook Navigator integration is active)
-	 */
+	/** Lucide icon name, raw emoji, or an emoji prefixed with `emoji:`. */
 	icon: string;
 
 	/** Icon color (hex, rgb or CSS name). `null` means "use theme default". */
@@ -54,11 +47,8 @@ export interface ShelfFolder {
 	path: string;
 }
 
-/** Global plugin settings, edited from the settings tab. */
+/** Global plugin settings persisted in `data.json`. */
 export interface ShelfSettings {
-	/** If true, show a badge on each shelf icon with the total note count. */
-	showBadgeCount: boolean;
-
 	/** If true, the tree shows files; if false, only folders are displayed. */
 	showFiles: boolean;
 
@@ -68,6 +58,10 @@ export interface ShelfSettings {
 	 */
 	fileExtensions: string[];
 
-	/** If true, attempt to read folder icons/colors from the Notebook Navigator plugin when present. */
-	nnIntegration: boolean;
+	/** Width of gallery cards in pixels. */
+	galleryThumbnailSize: number;
+
+	/** Open images in the gallery lightbox instead of opening the image file. */
+	galleryClickToZoom: boolean;
+
 }

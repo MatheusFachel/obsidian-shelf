@@ -1,90 +1,85 @@
-# Obsidian Sample Plugin
+# Shelf for Obsidian
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+Shelf gives large Obsidian vaults a smaller, focused file tree. Create named shelves, link the folders you use together, and switch between them from a compact sidebar. Each shelf is a view of your existing vault; linking a folder never moves or copies its files.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+Shelf also opens any folder as an image gallery in a central tab. The gallery is built into Shelf and does not require Folder as Gallery or another plugin.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+**Status:** First public development release (0.1.0). Desktop Obsidian 1.13.0 or newer is required. Shelf is not yet listed in Obsidian's community plugin catalog.
 
-## First time developing plugins?
+## Features
 
-Quick starting guide for new plugin devs:
+| Area | What you can do |
+| --- | --- |
+| Shelves | Create, edit, color, icon, reorder, and delete shelves. Choose icons from a searchable picker. |
+| Folder views | Link existing folders, expand nested folders, reorder linked roots, and navigate with the keyboard. The same folder may appear on different shelves. |
+| File work | Create Markdown notes and subfolders, make a quick note, open files, rename, and delete with confirmation. |
+| Image gallery | Browse a folder's images in a central tab, search by file name, enlarge an image, navigate, zoom, and use image file actions. |
+| Commands | Open Shelf, switch to the next or previous shelf, switch to shelves 1–9, and create a quick note from the command palette. |
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+## Use Shelf
 
-## Releasing new releases
+1. Enable **Shelf** in **Settings → Community plugins**.
+2. Select the library icon in the left ribbon to open the Shelf view.
+3. Select **+** to create a shelf. Choose an icon from the searchable list and optionally pick a custom color.
+4. Select the folder button next to the shelf name to link a folder.
+5. Select a shelf icon to switch shelves. Select a folder to expand it, or select a note to open it.
+6. Right-click any folder in Shelf and select **New note** or **New folder** to create something inside it.
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+Select the image button beside any folder, or right-click the folder and select **Open as gallery**, to browse images directly inside it. The gallery shows PNG, JPG, JPEG, GIF, WebP, SVG, BMP, and AVIF files; notes, videos, and other files stay out of this view. Open a subfolder's gallery separately from the Shelf tree.
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+Search filters images by file name. Select an image for a larger preview with a thumbnail strip. Use **←/→** or the mouse wheel to move between images, **↑/↓** or **+/-** to zoom, and drag a zoomed image to pan. Press **Esc** to close the preview. Right-click an image to open it in a new tab, copy its vault path, rename it, or delete it with confirmation. Gallery tabs follow folder renames and update when images change.
 
-## Adding your plugin to the community plugin list
+Drag shelf icons to change their order. Drag linked root folders within a shelf to change their display order; this does not move vault folders. The context menus also offer **Move left/right** and **Move up/down** for keyboard use. Nested folders retain the vault's alphabetical order.
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+Select the file-plus button beside the shelf title or run **Shelf: Create quick note** from the command palette. With one linked root, Shelf creates and opens a uniquely named `Untitled.md` there. With multiple linked roots, choose a destination first. A folder's context menu also has **Quick note** for creating one directly inside that folder.
 
-## How to use
+The command palette also offers **Open view**, **Switch to next**, **Switch to previous**, and **Switch to 1–9**. Assign hotkeys to these commands in Obsidian if desired.
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+A folder can be linked to more than one shelf. Within one shelf, a folder and its parent or child cannot both be linked as separate roots, which prevents duplicate content in the tree. Expand the parent folder to reach its subfolders.
 
-## Manually installing the plugin
+Right-click a shelf icon for **Edit shelf** or **Delete shelf**. Deleting a shelf removes its links, but leaves files and folders in the vault. Right-click a folder or note for Obsidian's file actions. **Rename** uses Obsidian's file manager. **Delete** asks for confirmation and uses your Obsidian trash preference. **Remove from shelf** removes only the folder link. The tree follows folder renames, creations and deletions in the vault.
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+### Install manually
 
-## Improve code quality with eslint
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
+Until Shelf is in the community catalog, install it from a GitHub release:
 
-## Funding URL
+1. Download `main.js`, `manifest.json`, and `styles.css` from the same release.
+2. Create `<your vault>/.obsidian/plugins/shelf/` and put those three files inside it.
+3. Restart Obsidian, then enable **Shelf** under **Settings → Community plugins**.
 
-You can include funding URLs where people who use your plugin can financially support it.
+To update, replace the three release files and reload Obsidian. Keep the plugin folder's `data.json`: it stores your shelf configuration.
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+### Keyboard
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+Use **Tab** to reach a shelf icon and **Enter** to open its tree. **Shift+F10** opens the shelf's context menu. In the tree, use **↑/↓** to move between visible items, **→** to expand or enter a folder, **←** to collapse or return to its parent, and **Enter** or **Space** to activate an item. **Home** and **End** move to the first and last visible items. **Shift+F10** opens the focused item's context menu.
+
+## Data and privacy
+
+Shelf stores shelf names, icons, colors, linked folder paths, order, and settings in Obsidian's local plugin `data.json`. It reads vault files to render the tree and gallery. The gallery displays local images using Obsidian resource URLs. Shelf does not send vault data to a server or collect telemetry.
+
+## Settings
+
+In **Settings → Community plugins → Shelf**, choose whether to show files and optionally list the file extensions to display. An empty extension list shows all file types. These settings affect only the Shelf tree. You can also adjust gallery card size and choose whether selecting an image opens the large preview or opens the file in Obsidian.
+
+## Development
+
+Install dependencies and run the checks:
+
+```sh
+npm ci
+npm run build
+npm run lint
+npm test
 ```
 
-If you have multiple URLs, you can also do:
+The build writes `main.js` next to `manifest.json` and `styles.css`. `main.js` is a release artifact and is excluded from Git. To test in a vault, place those three files in `<vault>/.obsidian/plugins/shelf/`, enable the plugin, and reload it after rebuilding. The local development vault can point that plugin directory at this project with a junction or symbolic link.
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
+Issues and contributions are welcome through this repository. Test file operations in a separate vault before changing valuable notes.
 
-## API Documentation
+## Current limits
 
-See https://docs.obsidian.md
+Shelf creates Markdown notes and subfolders. Dragging linked root folders changes their order in Shelf without moving them in the vault; moving files or nested folders by dragging is not included. The gallery shows images directly inside the selected folder; open a subfolder separately from the Shelf tree to see its images. The gallery does not require Folder as Gallery.
+
+## License
+
+Shelf is free and open source under the [MIT License](LICENSE). You may use, modify, and share it under that license.

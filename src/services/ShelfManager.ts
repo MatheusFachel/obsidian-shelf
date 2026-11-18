@@ -71,11 +71,27 @@ export class ShelfManager {
 			: typeof savedId === 'string' && shelves.some((shelf) => shelf.id === savedId)
 				? savedId
 				: shelves[0]?.id ?? null;
+		// Version 2 also stored two settings that had no effect. Rebuild the
+		// settings object so those keys disappear on the next normal save.
 		return {
 			version: CURRENT_DATA_VERSION,
 			activeShelfId,
 			shelves,
-			settings: { ...DEFAULT_DATA.settings, ...(raw.settings ?? {}) },
+			settings: {
+				showFiles: typeof raw.settings?.showFiles === 'boolean'
+					? raw.settings.showFiles
+					: DEFAULT_DATA.settings.showFiles,
+				fileExtensions: Array.isArray(raw.settings?.fileExtensions)
+					? raw.settings.fileExtensions.filter((extension): extension is string => typeof extension === 'string')
+					: [...DEFAULT_DATA.settings.fileExtensions],
+				galleryThumbnailSize: typeof raw.settings?.galleryThumbnailSize === 'number' &&
+					Number.isFinite(raw.settings.galleryThumbnailSize)
+					? Math.max(100, Math.min(500, raw.settings.galleryThumbnailSize))
+					: DEFAULT_DATA.settings.galleryThumbnailSize,
+				galleryClickToZoom: typeof raw.settings?.galleryClickToZoom === 'boolean'
+					? raw.settings.galleryClickToZoom
+					: DEFAULT_DATA.settings.galleryClickToZoom,
+			},
 		};
 	}
 
@@ -106,6 +122,13 @@ export class ShelfManager {
 
 	getSettings(): Readonly<ShelfSettings> {
 		return this.data.settings;
+	}
+
+	/** Persist display settings and refresh the open shelf view. */
+	async updateSettings(patch: Partial<ShelfSettings>): Promise<void> {
+		this.data.settings = { ...this.data.settings, ...patch };
+		await this.save();
+		this.notify();
 	}
 
 	// --- Write API ----------------------------------------------------------
@@ -185,6 +208,13 @@ export class ShelfManager {
 		this.notify();
 	}
 
+	/** Reorder shelf icons without changing their IDs, contents, or active state. */
+	async moveShelf(id: string, targetId: string | null, after = false): Promise<void> {
+		if (!moveBeforeOrAfter(this.data.shelves, id, targetId, after, (shelf) => shelf.id)) return;
+		await this.save();
+		this.notify();
+	}
+
 	/** Append a folder path to a shelf. No-op if the folder is already linked. */
 	async addFolderToShelf(shelfId: string, path: string): Promise<void> {
 		const shelf = this.getShelf(shelfId);
@@ -223,6 +253,15 @@ export class ShelfManager {
 		if (index < 0) return;
 		shelf.folders.splice(index, 1);
 
+		await this.save();
+		this.notify();
+	}
+
+	/** Reorder only the linked roots of a shelf; vault folders stay where they are. */
+	async moveLinkedFolder(shelfId: string, path: string, targetPath: string | null, after = false): Promise<void> {
+		const shelf = this.getShelf(shelfId);
+		if (!shelf) throw new Error(`Shelf not found: ${shelfId}`);
+		if (!moveBeforeOrAfter(shelf.folders, path, targetPath, after, (folder) => folder.path)) return;
 		await this.save();
 		this.notify();
 	}
@@ -291,4 +330,22 @@ export class ShelfManager {
 			listener();
 		}
 	}
+}
+
+/** Reorder a persisted array while leaving it untouched for invalid or no-op moves. */
+function moveBeforeOrAfter<T>(
+	items: T[], sourceId: string, targetId: string | null, after: boolean, getId: (item: T) => string,
+): boolean {
+	const sourceIndex = items.findIndex((item) => getId(item) === sourceId);
+	if (sourceIndex < 0) throw new Error(`Item not found: ${sourceId}`);
+	if (targetId === sourceId) return false;
+	if (targetId !== null && !items.some((item) => getId(item) === targetId)) {
+		throw new Error(`Drop target not found: ${targetId}`);
+	}
+	const before = items.map(getId).join('\0');
+	const [source] = items.splice(sourceIndex, 1);
+	if (!source) return false;
+	const targetIndex = targetId === null ? items.length : items.findIndex((item) => getId(item) === targetId);
+	items.splice(targetIndex + (targetId !== null && after ? 1 : 0), 0, source);
+	return items.map(getId).join('\0') !== before;
 }

@@ -16,8 +16,11 @@ export const SHELF_VIEW_LABEL = 'Shelf';
 /** Lucide icon used for the ribbon button and the view's tab icon. */
 export const SHELF_VIEW_ICON = 'library';
 
+/** Dedicated tab for browsing one vault folder as a visual grid. */
+export const SHELF_GALLERY_VIEW_TYPE = 'shelf-gallery-view';
+
 /** Current data schema version. Bump this when `ShelfPluginData` shape changes in a breaking way. */
-export const CURRENT_DATA_VERSION = 2;
+export const CURRENT_DATA_VERSION = 3;
 
 /**
  * Default plugin data. Used on first launch, and merged over `loadData()` to
@@ -28,9 +31,9 @@ export const DEFAULT_DATA: ShelfPluginData = {
 	activeShelfId: null,
 	shelves: [],
 	settings: {
-		showBadgeCount: true,
 		showFiles: true,
 		fileExtensions: [],
-		nnIntegration: true,
+		galleryThumbnailSize: 200,
+		galleryClickToZoom: true,
 	},
 };
