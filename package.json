@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-shelf",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Lightweight sidebar view with custom folder groupings ('shelves') for organizing your vault by context.",
 	"author": "Matheus Fachel",
 	"repository": {
@@ -23,12 +23,12 @@
 	"devDependencies": {
 		"@eslint/js": "9.30.1",
 		"@types/node": "20.19.43",
-		"esbuild": "0.25.5",
+		"esbuild": "0.28.2",
 		"eslint-plugin-obsidianmd": "0.4.2",
 		"globals": "14.0.0",
 		"jiti": "2.6.1",
 		"tslib": "2.4.0",
-		"typescript": "^5.8.3",
+		"typescript": "5.8.3",
 		"typescript-eslint": "8.35.1",
 		"vitest": "4.1.12"
 	},

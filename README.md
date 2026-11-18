@@ -4,7 +4,7 @@ Shelf gives large Obsidian vaults a smaller, focused file tree. Create named she
 
 Shelf also opens any folder as an image gallery in a central tab. The gallery is built into Shelf and does not require Folder as Gallery or another plugin.
 
-**Status:** First public development release (0.1.0). Desktop Obsidian 1.13.0 or newer is required. Shelf is not yet listed in Obsidian's community plugin catalog.
+**Status:** Public development release (0.1.1). Desktop Obsidian 1.13.0 or newer is required. Shelf is not yet listed in Obsidian's community plugin catalog.
 
 ## Features
 
