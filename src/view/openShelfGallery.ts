@@ -20,3 +20,21 @@ export async function openShelfGallery(app: App, folderPath: string): Promise<vo
 		new Notice(`Could not open gallery: ${message}`);
 	}
 }
+
+/** Open a shelf collection in the same gallery view used for vault folders. */
+export async function openShelfCollectionGallery(
+	app: App, shelfId: string, collectionId: string,
+): Promise<void> {
+	try {
+		const leaf = app.workspace.getLeaf('tab');
+		await leaf.setViewState({
+			type: SHELF_GALLERY_VIEW_TYPE,
+			active: true,
+			state: { shelfId, collectionId },
+		});
+		await app.workspace.revealLeaf(leaf);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		new Notice(`Could not open collection: ${message}`);
+	}
+}

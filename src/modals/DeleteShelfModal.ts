@@ -18,7 +18,7 @@ export class DeleteShelfModal extends Modal {
 		this.contentEl.empty();
 		this.setTitle('Delete shelf?');
 		this.contentEl.createEl('p', {
-			text: `Delete “${this.shelf.name}” and remove its folder links? Files and folders will stay in your vault.`,
+			text: `Delete “${this.shelf.name}” and its links and collections? Vault files will stay in place.`,
 		});
 
 		new Setting(this.contentEl)

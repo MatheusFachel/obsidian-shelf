@@ -1,9 +1,9 @@
 import type { Plugin } from 'obsidian';
 import { CURRENT_DATA_VERSION, DEFAULT_DATA } from '../constants';
-import type { Shelf, ShelfFolder, ShelfPluginData, ShelfSettings } from '../types';
+import type { Shelf, ShelfCollection, ShelfFolder, ShelfPluginData, ShelfSettings } from '../types';
 
 /** Callback invoked after any mutation to persisted shelf data. */
-export type ShelfChangeListener = () => void;
+export type ShelfChangeListener = (kind: 'data' | 'vault') => void;
 
 /**
  * Owns the plugin's persisted data and exposes CRUD operations over shelves.
@@ -16,32 +16,63 @@ export type ShelfChangeListener = () => void;
  */
 export class ShelfManager {
 	private data: ShelfPluginData;
+	private savedData: ShelfPluginData;
+	private pendingSave: Promise<void> = Promise.resolve();
+	private changeVersion = 0;
 	private readonly listeners = new Set<ShelfChangeListener>();
 
 	constructor(private readonly plugin: Plugin) {
 		// Seed with a safe default until `load()` is called.
 		// JSON round-trip gives us a deep clone without depending on `structuredClone`.
 		this.data = JSON.parse(JSON.stringify(DEFAULT_DATA)) as ShelfPluginData;
+		this.savedData = this.cloneData(this.data);
 	}
 
 	/** Load persisted data from disk, merging over `DEFAULT_DATA`. Safe on first launch. */
 	async load(): Promise<void> {
 		const raw = (await this.plugin.loadData()) as Partial<ShelfPluginData> | null;
 		this.data = this.mergeWithDefaults(raw);
+		this.savedData = this.cloneData(this.data);
 	}
 
 	/** Reload changes written to data.json by another device or program. */
 	async reloadFromDisk(): Promise<void> {
+		await this.pendingSave;
+		const version = this.changeVersion;
 		const raw = (await this.plugin.loadData()) as Partial<ShelfPluginData> | null;
+		// A local edit made while the read was in flight must win over that read.
+		if (version !== this.changeVersion) return;
 		const nextData = this.mergeWithDefaults(raw);
 		if (JSON.stringify(nextData) === JSON.stringify(this.data)) return;
 		this.data = nextData;
+		this.savedData = this.cloneData(nextData);
 		this.notify();
 	}
 
 	/** Persist the current in-memory data to `data.json`. */
 	private async save(): Promise<void> {
-		await this.plugin.saveData(this.data);
+		const snapshot = this.cloneData(this.data);
+		const version = ++this.changeVersion;
+		const write = this.pendingSave.then(async () => {
+			try {
+				await this.plugin.saveData(snapshot);
+				this.savedData = snapshot;
+			} catch (error) {
+				if (version === this.changeVersion) {
+					this.data = this.cloneData(this.savedData);
+					this.notify();
+				}
+				throw error;
+			}
+		});
+		// Keep the queue usable after a failed write while reporting that failure
+		// to the action that initiated it.
+		this.pendingSave = write.then(() => undefined, () => undefined);
+		await write;
+	}
+
+	private cloneData(data: ShelfPluginData): ShelfPluginData {
+		return JSON.parse(JSON.stringify(data)) as ShelfPluginData;
 	}
 
 	/**
@@ -59,8 +90,20 @@ export class ShelfManager {
 		const shelves: Shelf[] = Array.isArray(raw.shelves)
 			? raw.shelves.map((shelf) => ({
 				...shelf,
+				kind: shelf.kind === 'tag' ? 'tag' as const : 'folders' as const,
+				tag: shelf.kind === 'tag' && typeof shelf.tag === 'string' ? normalizeTag(shelf.tag) : null,
 				folders: Array.isArray(shelf.folders)
 					? shelf.folders.map((folder) => ({ path: folder.path }))
+					: [],
+				collections: Array.isArray(shelf.collections)
+					? shelf.collections.filter((collection) => collection && typeof collection.id === 'string')
+						.map((collection) => ({
+							id: collection.id,
+							name: typeof collection.name === 'string' ? collection.name : 'Collection',
+							files: Array.isArray(collection.files)
+								? collection.files.filter((path): path is string => typeof path === 'string') : [],
+							createdAt: typeof collection.createdAt === 'number' ? collection.createdAt : Date.now(),
+						}))
 					: [],
 			}))
 			: [];
@@ -111,6 +154,10 @@ export class ShelfManager {
 		return this.data.shelves.find((s) => s.id === id);
 	}
 
+	getCollection(shelfId: string, collectionId: string): ShelfCollection | undefined {
+		return this.getShelf(shelfId)?.collections.find((collection) => collection.id === collectionId);
+	}
+
 	getActiveShelfId(): string | null {
 		return this.data.activeShelfId;
 	}
@@ -149,16 +196,24 @@ export class ShelfManager {
 		name: string;
 		icon: string;
 		color?: string | null;
+		kind?: 'folders' | 'tag';
+		tag?: string | null;
 	}): Promise<Shelf> {
 		const name = input.name.trim();
 		if (!name) throw new Error('Shelf name cannot be empty');
+		const kind = input.kind ?? 'folders';
+		const tag = kind === 'tag' ? normalizeTag(input.tag ?? '') : null;
+		if (kind === 'tag' && !tag) throw new Error('Enter a tag for this shelf');
 
 		const shelf: Shelf = {
 			id: crypto.randomUUID(),
 			name,
 			icon: input.icon,
 			color: input.color ?? null,
+			kind,
+			tag,
 			folders: [],
+			collections: [],
 			createdAt: Date.now(),
 		};
 
@@ -177,18 +232,22 @@ export class ShelfManager {
 	/** Partially update a shelf. Only the fields present in `patch` are touched. */
 	async updateShelf(
 		id: string,
-		patch: Partial<Pick<Shelf, 'name' | 'icon' | 'color'>>,
+		patch: Partial<Pick<Shelf, 'name' | 'icon' | 'color' | 'tag'>>,
 	): Promise<void> {
 		const shelf = this.getShelf(id);
 		if (!shelf) throw new Error(`Shelf not found: ${id}`);
-
-		if (patch.name !== undefined) {
-			const name = patch.name.trim();
-			if (!name) throw new Error('Shelf name cannot be empty');
-			shelf.name = name;
+		const name = patch.name?.trim();
+		if (patch.name !== undefined && !name) throw new Error('Shelf name cannot be empty');
+		const tag = patch.tag !== undefined && shelf.kind === 'tag'
+			? normalizeTag(patch.tag ?? '') : undefined;
+		if (patch.tag !== undefined && shelf.kind === 'tag' && !tag) {
+			throw new Error('Enter a tag for this shelf');
 		}
+
+		if (name !== undefined) shelf.name = name;
 		if (patch.icon !== undefined) shelf.icon = patch.icon;
 		if (patch.color !== undefined) shelf.color = patch.color;
+		if (tag !== undefined) shelf.tag = tag;
 
 		await this.save();
 		this.notify();
@@ -219,6 +278,7 @@ export class ShelfManager {
 	async addFolderToShelf(shelfId: string, path: string): Promise<void> {
 		const shelf = this.getShelf(shelfId);
 		if (!shelf) throw new Error(`Shelf not found: ${shelfId}`);
+		if (shelf.kind !== 'folders') throw new Error('Tag shelves cannot link folders');
 		const overlap = this.findOverlappingFolder(shelf, path);
 		if (overlap?.path === path) return;
 		if (overlap) {
@@ -234,7 +294,7 @@ export class ShelfManager {
 	/** A linked parent or child would show the same files twice in one shelf. */
 	canAddFolderToShelf(shelfId: string, path: string): boolean {
 		const shelf = this.getShelf(shelfId);
-		return shelf !== undefined && this.findOverlappingFolder(shelf, path) === undefined;
+		return shelf !== undefined && shelf.kind === 'folders' && this.findOverlappingFolder(shelf, path) === undefined;
 	}
 
 	private findOverlappingFolder(shelf: Shelf, path: string): ShelfFolder | undefined {
@@ -266,6 +326,61 @@ export class ShelfManager {
 		this.notify();
 	}
 
+	/** Create a named collection of image references inside a shelf. */
+	async createCollection(shelfId: string, name: string): Promise<ShelfCollection> {
+		const shelf = this.getShelf(shelfId);
+		if (!shelf) throw new Error(`Shelf not found: ${shelfId}`);
+		const trimmed = name.trim();
+		if (!trimmed) throw new Error('Collection name cannot be empty');
+		const collection: ShelfCollection = {
+			id: crypto.randomUUID(), name: trimmed, files: [], createdAt: Date.now(),
+		};
+		shelf.collections.push(collection);
+		await this.save();
+		this.notify();
+		return collection;
+	}
+
+	async renameCollection(shelfId: string, collectionId: string, name: string): Promise<void> {
+		const collection = this.getCollection(shelfId, collectionId);
+		if (!collection) throw new Error('Collection not found');
+		const trimmed = name.trim();
+		if (!trimmed) throw new Error('Collection name cannot be empty');
+		if (collection.name === trimmed) return;
+		collection.name = trimmed;
+		await this.save();
+		this.notify();
+	}
+
+	async deleteCollection(shelfId: string, collectionId: string): Promise<void> {
+		const shelf = this.getShelf(shelfId);
+		if (!shelf) throw new Error(`Shelf not found: ${shelfId}`);
+		const index = shelf.collections.findIndex((collection) => collection.id === collectionId);
+		if (index < 0) return;
+		shelf.collections.splice(index, 1);
+		await this.save();
+		this.notify();
+	}
+
+	async addFileToCollection(shelfId: string, collectionId: string, path: string): Promise<void> {
+		const collection = this.getCollection(shelfId, collectionId);
+		if (!collection) throw new Error('Collection not found');
+		if (collection.files.includes(path)) return;
+		collection.files.push(path);
+		await this.save();
+		this.notify();
+	}
+
+	async removeFileFromCollection(shelfId: string, collectionId: string, path: string): Promise<void> {
+		const collection = this.getCollection(shelfId, collectionId);
+		if (!collection) throw new Error('Collection not found');
+		const index = collection.files.indexOf(path);
+		if (index < 0) return;
+		collection.files.splice(index, 1);
+		await this.save();
+		this.notify();
+	}
+
 	// --- Path synchronisation -----------------------------------------------
 
 	/**
@@ -275,20 +390,57 @@ export class ShelfManager {
 	async updateFolderPath(oldPath: string, newPath: string): Promise<void> {
 		let changed = false;
 		for (const shelf of this.data.shelves) {
+			let shelfChanged = false;
 			for (const folder of shelf.folders) {
 				if (folder.path === oldPath) {
 					folder.path = newPath;
 					changed = true;
+					shelfChanged = true;
 				} else if (folder.path.startsWith(oldPath + '/')) {
 					folder.path = newPath + folder.path.slice(oldPath.length);
 					changed = true;
+					shelfChanged = true;
 				}
+			}
+			if (shelfChanged) {
+				// A move can place one linked root inside another linked root.
+				// Keep the parent, since expanding it already exposes the child.
+				shelf.folders = shelf.folders.filter((folder, index, folders) =>
+					!folders.some((other, otherIndex) => otherIndex !== index && (
+						folder.path.startsWith(other.path + '/') ||
+						(folder.path === other.path && otherIndex < index)
+					)),
+				);
+			}
+			for (const collection of shelf.collections) {
+				collection.files = collection.files.map((path) => {
+					if (path !== oldPath && !path.startsWith(oldPath + '/')) return path;
+					changed = true;
+					return newPath + path.slice(oldPath.length);
+				});
 			}
 		}
 		if (changed) {
 			await this.save();
 			this.notify();
 		}
+	}
+
+	/** Keep collection references pointing to a renamed or moved image. */
+	async updateFilePath(oldPath: string, newPath: string): Promise<void> {
+		let changed = false;
+		for (const shelf of this.data.shelves) {
+			for (const collection of shelf.collections) {
+				collection.files = collection.files.map((path) => {
+					if (path !== oldPath) return path;
+					changed = true;
+					return newPath;
+				});
+			}
+		}
+		if (!changed) return;
+		await this.save();
+		this.notify();
 	}
 
 	/**
@@ -314,7 +466,7 @@ export class ShelfManager {
 
 	/** Refresh subscribed views when vault contents change without changing shelf data. */
 	notifyVaultChanged(): void {
-		this.notify();
+		this.notify('vault');
 	}
 
 	/** Subscribe to change notifications. Returns a function that unsubscribes. */
@@ -325,11 +477,17 @@ export class ShelfManager {
 		};
 	}
 
-	private notify(): void {
+	private notify(kind: 'data' | 'vault' = 'data'): void {
 		for (const listener of this.listeners) {
-			listener();
+			listener(kind);
 		}
 	}
+}
+
+/** Store tags in the same form returned by Obsidian's metadata cache. */
+function normalizeTag(value: string): string | null {
+	const tag = value.trim().replace(/^#/, '');
+	return tag && !/[\s#]/.test(tag) ? `#${tag}` : null;
 }
 
 /** Reorder a persisted array while leaving it untouched for invalid or no-op moves. */

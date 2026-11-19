@@ -6,8 +6,9 @@ export class GalleryLightbox {
 	private readonly imageEl: HTMLImageElement;
 	private readonly nameEl: HTMLElement;
 	private readonly zoomEl: HTMLElement;
-	private readonly thumbs: HTMLButtonElement[] = [];
+	private readonly strip: HTMLElement;
 	private readonly events = new AbortController();
+	private readonly previousFocus: HTMLElement | null;
 	private index: number;
 	private zoom = 1;
 	private x = 0;
@@ -28,6 +29,7 @@ export class GalleryLightbox {
 		this.index = Math.max(0, initialIndex);
 		const doc = host.ownerDocument;
 		const win = doc.defaultView;
+		this.previousFocus = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
 		this.overlay = doc.body.createDiv({ cls: 'shelf-gallery-lightbox' });
 		this.overlay.setAttribute('role', 'dialog');
 		this.overlay.setAttribute('aria-modal', 'true');
@@ -66,19 +68,7 @@ export class GalleryLightbox {
 		});
 		next.addEventListener('click', () => this.move(1));
 
-		const strip = this.overlay.createDiv({ cls: 'shelf-gallery-lightbox-strip' });
-		for (const [index, file] of images.entries()) {
-			const button = strip.createEl('button', {
-				cls: 'shelf-gallery-lightbox-thumb',
-				attr: { type: 'button', 'aria-label': `Show ${file.name}` },
-			});
-			const image = button.createEl('img');
-			image.src = app.vault.getResourcePath(file);
-			image.alt = '';
-			image.loading = 'lazy';
-			button.addEventListener('click', () => this.select(index));
-			this.thumbs.push(button);
-		}
+		this.strip = this.overlay.createDiv({ cls: 'shelf-gallery-lightbox-strip' });
 
 		this.overlay.addEventListener('click', (event) => {
 			if (event.target === this.overlay) this.close();
@@ -86,7 +76,7 @@ export class GalleryLightbox {
 		this.overlay.addEventListener('wheel', (event) => this.onWheel(event), {
 			passive: false, signal: this.events.signal,
 		});
-		win?.addEventListener('keydown', (event) => this.onKeyDown(event), { signal: this.events.signal });
+		this.overlay.addEventListener('keydown', (event) => this.onKeyDown(event), { signal: this.events.signal });
 		win?.addEventListener('mousemove', (event) => this.onMouseMove(event), { signal: this.events.signal });
 		win?.addEventListener('mouseup', () => this.stopPan(), { signal: this.events.signal });
 		this.select(this.index);
@@ -97,6 +87,7 @@ export class GalleryLightbox {
 		if (!this.overlay.isConnected) return;
 		this.events.abort();
 		this.overlay.remove();
+		if (this.previousFocus?.isConnected) this.previousFocus.focus();
 		this.onClose();
 	}
 
@@ -108,10 +99,33 @@ export class GalleryLightbox {
 		this.imageEl.alt = file.name;
 		this.nameEl.setText(`${file.name} (${index + 1}/${this.images.length})`);
 		this.setZoom(1);
-		for (const [thumbIndex, thumb] of this.thumbs.entries()) {
-			thumb.toggleClass('is-active', thumbIndex === index);
+		this.renderThumbnails();
+	}
+
+	/** Keep only nearby thumbnails in the DOM, even for very large folders. */
+	private renderThumbnails(): void {
+		const restoreFocus = this.strip.contains(this.strip.ownerDocument.activeElement);
+		this.strip.empty();
+		const first = Math.max(0, this.index - 15);
+		const last = Math.min(this.images.length, this.index + 16);
+		let activeButton: HTMLButtonElement | null = null;
+		for (let index = first; index < last; index++) {
+			const file = this.images[index];
+			if (!file) continue;
+			const button = this.strip.createEl('button', {
+				cls: 'shelf-gallery-lightbox-thumb',
+				attr: { type: 'button', 'aria-label': `Show ${file.name}` },
+			});
+			button.toggleClass('is-active', index === this.index);
+			const image = button.createEl('img');
+			image.src = this.app.vault.getResourcePath(file);
+			image.alt = '';
+			image.loading = 'lazy';
+			button.addEventListener('click', () => this.select(index));
+			if (index === this.index) activeButton = button;
 		}
-		this.thumbs[index]?.scrollIntoView({ block: 'nearest', inline: 'center' });
+		if (restoreFocus) activeButton?.focus({ preventScroll: true });
+		activeButton?.scrollIntoView({ block: 'nearest', inline: 'center' });
 	}
 
 	private move(delta: number): void {
@@ -134,7 +148,20 @@ export class GalleryLightbox {
 	}
 
 	private onKeyDown(event: KeyboardEvent): void {
-		if (event.key === 'Escape') {
+		if (event.key === 'Tab') {
+			const controls = Array.from(this.overlay.querySelectorAll<HTMLButtonElement>('button'));
+			const first = controls[0];
+			const last = controls[controls.length - 1];
+			if (!first || !last) return;
+			const active = this.overlay.ownerDocument.activeElement;
+			if (event.shiftKey && (active === first || active === this.overlay)) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && (active === last || active === this.overlay)) {
+				event.preventDefault();
+				first.focus();
+			}
+		} else if (event.key === 'Escape') {
 			event.preventDefault();
 			this.close();
 		} else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {

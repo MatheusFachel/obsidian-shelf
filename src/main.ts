@@ -1,5 +1,6 @@
 import { Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import { SHELF_GALLERY_VIEW_TYPE, SHELF_VIEW_ICON, SHELF_VIEW_LABEL, SHELF_VIEW_TYPE } from './constants';
+import { addCurrentNoteFolder } from './modals/AddCurrentFolderModal';
 import { openQuickNote } from './modals/QuickNoteFolderModal';
 import { ShelfManager } from './services/ShelfManager';
 import { registerVaultSync } from './services/registerVaultSync';
@@ -51,6 +52,10 @@ export default class ShelfPlugin extends Plugin {
 		this.addCommand({
 			id: 'quick-note', name: 'Create quick note',
 			callback: () => { void this.quickNote(); },
+		});
+		this.addCommand({
+			id: 'add-current-folder', name: 'Add current note folder',
+			callback: () => addCurrentNoteFolder(this.app, this.shelfManager),
 		});
 		this.addCommand({
 			id: 'next', name: 'Switch to next',

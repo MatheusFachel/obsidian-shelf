@@ -34,10 +34,27 @@ export interface Shelf {
 	/** Icon color (hex, rgb or CSS name). `null` means "use theme default". */
 	color: string | null;
 
+	/** Folder tree or a read-only list of Markdown notes matching a tag. */
+	kind: 'folders' | 'tag';
+
+	/** Normalized tag including '#', used when kind is 'tag'. */
+	tag: string | null;
+
 	/** Folders linked to this shelf, in the order they should be rendered. */
 	folders: ShelfFolder[];
 
+	/** Named image references; originals remain in their vault folders. */
+	collections: ShelfCollection[];
+
 	/** Unix timestamp (ms) when this shelf was created. */
+	createdAt: number;
+}
+
+/** A visual collection stores paths without moving or copying images. */
+export interface ShelfCollection {
+	id: string;
+	name: string;
+	files: string[];
 	createdAt: number;
 }
 

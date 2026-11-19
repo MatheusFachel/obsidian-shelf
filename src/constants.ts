@@ -20,7 +20,7 @@ export const SHELF_VIEW_ICON = 'library';
 export const SHELF_GALLERY_VIEW_TYPE = 'shelf-gallery-view';
 
 /** Current data schema version. Bump this when `ShelfPluginData` shape changes in a breaking way. */
-export const CURRENT_DATA_VERSION = 3;
+export const CURRENT_DATA_VERSION = 4;
 
 /**
  * Default plugin data. Used on first launch, and merged over `loadData()` to

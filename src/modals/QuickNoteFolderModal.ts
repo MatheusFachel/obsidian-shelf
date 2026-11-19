@@ -7,6 +7,10 @@ export function openQuickNote(
 	app: App, shelfManager: ShelfManager, onCreated?: (folderPath: string) => void,
 ): void {
 	const shelf = shelfManager.getActiveShelf();
+	if (shelf?.kind === 'tag') {
+		new Notice('Choose a folder shelf to create a quick note.');
+		return;
+	}
 	if (!shelf) {
 		new Notice('Select a shelf before creating a quick note.');
 		return;

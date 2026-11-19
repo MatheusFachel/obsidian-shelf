@@ -4,17 +4,29 @@ Shelf gives large Obsidian vaults a smaller, focused file tree. Create named she
 
 Shelf also opens any folder as an image gallery in a central tab. The gallery is built into Shelf and does not require Folder as Gallery or another plugin.
 
-**Status:** Public development release (0.1.1). Desktop Obsidian 1.13.0 or newer is required. Shelf is not yet listed in Obsidian's community plugin catalog.
+**Status:** Public release (0.2.0). Desktop Obsidian 1.13.0 or newer is required. Shelf is not yet listed in Obsidian's community plugin catalog.
+
+## New in 0.2.0
+
+- **Move to…** on notes and nested folders offers destinations in the active folder shelf and confirms the resulting path before changing the vault.
+- **Include subfolders** in a gallery tab shows images from nested folders with their origin beneath each file name. The choice is saved with the tab layout.
+- **Collections** appear below a shelf's tree. Create a collection there, then use an image's gallery menu to add it. Collections store image paths only; removing a reference does not remove its vault file. Renamed paths follow the original file, and deleted images are shown as missing references.
+- **Add current note folder** in the command palette links the parent folder of the open Markdown note to a folder shelf.
+- **Resume navigation** restores expanded folders and the last tree item through Obsidian's workspace layout state.
+- **Tag shelves** can be created alongside folder shelves. They list Markdown notes with a chosen tag, grouped by source folder. Membership updates from note metadata; tag shelves do not define a destination for new notes.
+
+For a step-by-step check in a separate vault, see [the test guide](docs/testes-seis-funcionalidades.md).
 
 ## Features
 
 | Area | What you can do |
 | --- | --- |
-| Shelves | Create, edit, color, icon, reorder, and delete shelves. Choose icons from a searchable picker. |
+| Shelves | Create, edit, color, icon, reorder, and delete folder or tag shelves. Choose icons from a searchable picker. |
 | Folder views | Link existing folders, expand nested folders, reorder linked roots, and navigate with the keyboard. The same folder may appear on different shelves. |
 | File work | Create Markdown notes and subfolders, make a quick note, open files, rename, and delete with confirmation. |
-| Image gallery | Browse a folder's images in a central tab, search by file name, enlarge an image, navigate, zoom, and use image file actions. |
-| Commands | Open Shelf, switch to the next or previous shelf, switch to shelves 1–9, and create a quick note from the command palette. |
+| Image gallery | Browse a folder's images in a central tab, optionally include subfolders, search by file name, enlarge an image, navigate, zoom, and use image file actions. |
+| Collections | Group references to vault images below a shelf without copying their files. |
+| Commands | Open Shelf, switch to the next or previous shelf, switch to shelves 1–9, create a quick note, and link the current note's folder from the command palette. |
 
 ## Use Shelf
 
@@ -27,7 +39,7 @@ Shelf also opens any folder as an image gallery in a central tab. The gallery is
 
 Select the image button beside any folder, or right-click the folder and select **Open as gallery**, to browse images directly inside it. The gallery shows PNG, JPG, JPEG, GIF, WebP, SVG, BMP, and AVIF files; notes, videos, and other files stay out of this view. Open a subfolder's gallery separately from the Shelf tree.
 
-Search filters images by file name. Select an image for a larger preview with a thumbnail strip. Use **←/→** or the mouse wheel to move between images, **↑/↓** or **+/-** to zoom, and drag a zoomed image to pan. Press **Esc** to close the preview. Right-click an image to open it in a new tab, copy its vault path, rename it, or delete it with confirmation. Gallery tabs follow folder renames and update when images change.
+Search filters images by file name. Select an image for a larger preview with a thumbnail strip. Use **←/→** or the mouse wheel to move between images, **↑/↓** or **+/-** to zoom, and drag a zoomed image to pan. Press **Esc** to close the preview. Right-click an image to open it in a new tab, copy its vault path, rename it, or delete it with confirmation. Gallery tabs follow folder renames and update when images change. Enable **Include subfolders** in the gallery to show images from nested folders.
 
 Drag shelf icons to change their order. Drag linked root folders within a shelf to change their display order; this does not move vault folders. The context menus also offer **Move left/right** and **Move up/down** for keyboard use. Nested folders retain the vault's alphabetical order.
 
@@ -55,7 +67,7 @@ Use **Tab** to reach a shelf icon and **Enter** to open its tree. **Shift+F10** 
 
 ## Data and privacy
 
-Shelf stores shelf names, icons, colors, linked folder paths, order, and settings in Obsidian's local plugin `data.json`. It reads vault files to render the tree and gallery. The gallery displays local images using Obsidian resource URLs. Shelf does not send vault data to a server or collect telemetry.
+Shelf stores shelf names, icons, colors, linked folder paths, collection image paths, order, and settings in Obsidian's local plugin `data.json`. It reads vault files to render the tree and gallery. The gallery displays local images using Obsidian resource URLs. Shelf does not send vault data to a server or collect telemetry.
 
 ## Settings
 
@@ -78,7 +90,7 @@ Issues and contributions are welcome through this repository. Test file operatio
 
 ## Current limits
 
-Shelf creates Markdown notes and subfolders. Dragging linked root folders changes their order in Shelf without moving them in the vault; moving files or nested folders by dragging is not included. The gallery shows images directly inside the selected folder; open a subfolder separately from the Shelf tree to see its images. The gallery does not require Folder as Gallery.
+Shelf creates Markdown notes and subfolders. Dragging linked root folders changes their order in Shelf without moving them in the vault; moving files or nested folders by dragging is not included. **Move to…** moves nested items with a confirmation. The gallery shows images directly inside the selected folder by default and can optionally include subfolders. The gallery does not require Folder as Gallery.
 
 ## License
 

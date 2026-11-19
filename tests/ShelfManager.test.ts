@@ -13,14 +13,17 @@ function makeShelf(id: string, paths: string[]): Shelf {
 		name: id,
 		icon: 'library',
 		color: null,
+		kind: 'folders',
+		tag: null,
 		folders: paths.map((path) => ({ path })),
+		collections: [],
 		createdAt: 1,
 	};
 }
 
 function makeData(shelves: Shelf[], activeShelfId: string | null = shelves[0]?.id ?? null): ShelfPluginData {
 	return {
-		version: 3,
+		version: 4,
 		activeShelfId,
 		shelves,
 		settings: {
@@ -154,7 +157,7 @@ describe('ShelfManager persistence', () => {
 
 		await harness.manager.setActiveShelf('second');
 		const saved = harness.readDisk() as ShelfPluginData;
-		expect(saved.version).toBe(3);
+		expect(saved.version).toBe(4);
 		expect(saved.shelves[0]?.folders).toEqual([{ path: 'Books' }, { path: 'Music' }]);
 		expect(saved.shelves[0]?.color).toBe('#cc8844');
 		expect(saved.settings).toEqual({
@@ -184,7 +187,7 @@ describe('ShelfManager persistence', () => {
 
 		const saved = harness.readDisk() as ShelfPluginData;
 		expect(saved.shelves[0]?.folders.map((folder) => folder.path)).toEqual([
-			'Library', 'Library/Novels', 'Bookshelf',
+			'Library', 'Bookshelf',
 		]);
 		expect(saved.shelves[1]?.folders[0]?.path).toBe('Library/Poetry');
 		expect(harness.saveData).toHaveBeenCalledOnce();
@@ -235,5 +238,109 @@ describe('ShelfManager persistence', () => {
 		expect(harness.manager.getActiveShelf()?.folders).toEqual([
 			{ path: 'Books' }, { path: 'Music' },
 		]);
+	});
+
+	it('serializes saves so a slower first write cannot overwrite the latest state', async () => {
+		const harness = makeHarness(makeData([makeShelf('first', [])]));
+		await harness.manager.load();
+		let finishFirst!: () => void;
+		const firstWrite = new Promise<void>((resolve) => { finishFirst = resolve; });
+		harness.saveData.mockImplementationOnce(async () => { await firstWrite; });
+		const first = harness.manager.updateSettings({ showFiles: false });
+		await Promise.resolve();
+		const second = harness.manager.updateSettings({ galleryThumbnailSize: 300 });
+		expect(harness.saveData).toHaveBeenCalledTimes(1);
+		finishFirst();
+		await Promise.all([first, second]);
+		expect(harness.saveData).toHaveBeenCalledTimes(2);
+		expect((harness.readDisk() as ShelfPluginData).settings).toMatchObject({
+			showFiles: false, galleryThumbnailSize: 300,
+		});
+	});
+
+	it('restores the last saved state after a failed write', async () => {
+		const harness = makeHarness(makeData([makeShelf('first', [])]));
+		await harness.manager.load();
+		harness.saveData.mockRejectedValueOnce(new Error('disk full'));
+		await expect(harness.manager.updateSettings({ showFiles: false })).rejects.toThrow('disk full');
+		expect(harness.manager.getSettings().showFiles).toBe(true);
+		await harness.manager.updateSettings({ galleryThumbnailSize: 300 });
+		expect((harness.readDisk() as ShelfPluginData).settings).toMatchObject({
+			showFiles: true, galleryThumbnailSize: 300,
+		});
+	});
+
+	it('waits for a pending local save before reloading the data file', async () => {
+		const harness = makeHarness(makeData([makeShelf('first', [])]));
+		await harness.manager.load();
+		let finishWrite!: () => void;
+		const writeGate = new Promise<void>((resolve) => { finishWrite = resolve; });
+		harness.saveData.mockImplementationOnce(async (value) => {
+			await writeGate;
+			harness.writeDisk(value);
+		});
+		const update = harness.manager.updateSettings({ showFiles: false });
+		await Promise.resolve();
+		const reload = harness.manager.reloadFromDisk();
+		expect(harness.loadData).toHaveBeenCalledOnce();
+		finishWrite();
+		await Promise.all([update, reload]);
+		expect(harness.manager.getSettings().showFiles).toBe(false);
+		expect((harness.readDisk() as ShelfPluginData).settings.showFiles).toBe(false);
+	});
+
+	it('drops a moved root when it becomes a child of another linked root', async () => {
+		const harness = makeHarness(makeData([makeShelf('first', ['A', 'B'])]));
+		await harness.manager.load();
+		await harness.manager.updateFolderPath('A', 'B/A');
+		expect(harness.manager.getShelf('first')?.folders).toEqual([{ path: 'B' }]);
+		expect((harness.readDisk() as ShelfPluginData).shelves[0]?.folders).toEqual([{ path: 'B' }]);
+	});
+
+	it('migrates shelves from the previous schema without losing folder links', async () => {
+		const oldShelf = makeShelf('legacy', ['Books']);
+		const raw = { ...makeData([oldShelf]), version: 3 } as unknown as ShelfPluginData;
+		delete (raw.shelves[0] as unknown as Record<string, unknown>).kind;
+		delete (raw.shelves[0] as unknown as Record<string, unknown>).tag;
+		delete (raw.shelves[0] as unknown as Record<string, unknown>).collections;
+		const harness = makeHarness(raw);
+		await harness.manager.load();
+		expect(harness.manager.getShelf('legacy')).toMatchObject({
+			kind: 'folders', tag: null, collections: [], folders: [{ path: 'Books' }],
+		});
+		await harness.manager.updateSettings({ showFiles: false });
+		expect((harness.readDisk() as ShelfPluginData).version).toBe(4);
+	});
+
+	it('creates a tag shelf and keeps folder links restricted to folder shelves', async () => {
+		const harness = makeHarness(makeData([]));
+		await harness.manager.load();
+		const shelf = await harness.manager.createShelf({
+			name: 'Project', icon: 'tag', kind: 'tag', tag: ' #project-alpha ',
+		});
+		expect(shelf).toMatchObject({ kind: 'tag', tag: '#project-alpha', folders: [] });
+		await expect(harness.manager.addFolderToShelf(shelf.id, 'Projects')).rejects.toThrow('cannot link');
+		await harness.manager.updateShelf(shelf.id, { tag: '#research' });
+		expect(harness.manager.getShelf(shelf.id)?.tag).toBe('#research');
+		await expect(harness.manager.updateShelf(shelf.id, { tag: 'two words' })).rejects.toThrow();
+		expect(harness.manager.getShelf(shelf.id)?.tag).toBe('#research');
+	});
+
+	it('keeps collection references in sync with image and folder renames', async () => {
+		const harness = makeHarness(makeData([makeShelf('first', ['Pictures'])]));
+		await harness.manager.load();
+		const collection = await harness.manager.createCollection('first', 'Moodboard');
+		await harness.manager.renameCollection('first', collection.id, 'References');
+		expect(harness.manager.getCollection('first', collection.id)?.name).toBe('References');
+		await harness.manager.addFileToCollection('first', collection.id, 'Pictures/blue.png');
+		await harness.manager.addFileToCollection('first', collection.id, 'Pictures/blue.png');
+		expect(harness.manager.getCollection('first', collection.id)?.files).toEqual(['Pictures/blue.png']);
+		await harness.manager.updateFilePath('Pictures/blue.png', 'Pictures/azure.png');
+		await harness.manager.updateFolderPath('Pictures', 'Images');
+		expect(harness.manager.getCollection('first', collection.id)?.files).toEqual(['Images/azure.png']);
+		await harness.manager.removeFileFromCollection('first', collection.id, 'Images/azure.png');
+		expect(harness.manager.getCollection('first', collection.id)?.files).toEqual([]);
+		await harness.manager.deleteCollection('first', collection.id);
+		expect(harness.manager.getCollection('first', collection.id)).toBeUndefined();
 	});
 });

@@ -10,6 +10,8 @@ export class CreateShelfModal extends Modal {
 	private name: string;
 	private icon: string;
 	private color: string | null;
+	private kind: 'folders' | 'tag';
+	private tag: string;
 	private saving = false;
 
 	constructor(
@@ -21,6 +23,8 @@ export class CreateShelfModal extends Modal {
 		this.name = shelf?.name ?? '';
 		this.icon = shelf?.icon ?? 'library';
 		this.color = shelf?.color ?? null;
+		this.kind = shelf?.kind ?? 'folders';
+		this.tag = shelf?.tag ?? '';
 	}
 
 	onOpen(): void {
@@ -38,6 +42,28 @@ export class CreateShelfModal extends Modal {
 				});
 				window.setTimeout(() => text.inputEl.focus(), 0);
 			});
+
+		if (!this.shelf) {
+			new Setting(contentEl)
+				.setName('Contents')
+				.setDesc('Choose folders manually or show notes with a tag.')
+				.addDropdown((dropdown) => {
+					dropdown.addOption('folders', 'Linked folders').addOption('tag', 'Notes with a tag')
+						.setValue(this.kind).onChange((value) => {
+							this.kind = value === 'tag' ? 'tag' : 'folders';
+							tagSetting.settingEl.toggleClass('shelf-hidden', this.kind !== 'tag');
+						});
+				});
+		}
+		const tagSetting = new Setting(contentEl)
+			.setName('Tag')
+			.setDesc('For example, #project. Notes matching this tag appear automatically.')
+			.addText((text) => {
+				text.setPlaceholder('#Project').setValue(this.tag).onChange((value) => {
+					this.tag = value;
+				});
+			});
+		tagSetting.settingEl.toggleClass('shelf-hidden', this.kind !== 'tag');
 
 		const iconSetting = new Setting(contentEl)
 			.setName('Icon')
@@ -109,11 +135,11 @@ export class CreateShelfModal extends Modal {
 
 	private async submit(): Promise<void> {
 		try {
-			const values = { name: this.name, icon: this.icon, color: this.color };
+			const values = { name: this.name, icon: this.icon, color: this.color, tag: this.tag };
 			if (this.shelf) {
 				await this.shelfManager.updateShelf(this.shelf.id, values);
 			} else {
-				await this.shelfManager.createShelf(values);
+				await this.shelfManager.createShelf({ ...values, kind: this.kind });
 			}
 			this.close();
 		} catch (error) {

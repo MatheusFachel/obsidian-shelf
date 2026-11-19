@@ -1,7 +1,7 @@
 {
 	"id": "shelf",
 	"name": "Shelf",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"minAppVersion": "1.13.0",
 	"description": "Lightweight sidebar view with custom folder groupings ('shelves') for organizing your vault by context.",
 	"author": "Matheus Fachel",

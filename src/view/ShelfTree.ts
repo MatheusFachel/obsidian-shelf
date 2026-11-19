@@ -1,8 +1,9 @@
-import { App, Menu, Notice, setIcon, TAbstractFile, TFile, TFolder } from 'obsidian';
+import { App, getAllTags, Menu, Notice, setIcon, TAbstractFile, TFile, TFolder } from 'obsidian';
 import { CreateVaultItemModal } from '../modals/CreateVaultItemModal';
 import { createQuickNote } from '../modals/QuickNoteFolderModal';
 import { DeleteFileModal } from '../modals/DeleteFileModal';
 import { RenameFileModal } from '../modals/RenameFileModal';
+import { MoveVaultItemModal } from '../modals/MoveVaultItemModal';
 import type { ShelfManager } from '../services/ShelfManager';
 import type { Shelf } from '../types';
 import { openShelfGallery } from './openShelfGallery';
@@ -36,15 +37,23 @@ export class ShelfTree {
 	private root: HTMLElement | null = null;
 	private currentShelf: Shelf | null = null;
 	private readonly expanded = new Set<string>();
+	private readonly expandedByShelf = new Map<string, Set<string>>();
+	private readonly focusedByShelf = new Map<string, string>();
 	private focusedPath: string | null = null;
 
 	constructor(
 		private readonly app: App,
 		private readonly shelfManager: ShelfManager,
+		private readonly onNavigationChange: () => void,
 	) {}
 
 	/** First-time render: create the tree root inside `parent` and populate it. */
 	render(parent: HTMLElement, shelf: Shelf): void {
+		if (this.currentShelf?.id !== shelf.id) {
+			this.expanded.clear();
+			for (const path of this.expandedByShelf.get(shelf.id) ?? []) this.expanded.add(path);
+			this.focusedPath = this.focusedByShelf.get(shelf.id) ?? null;
+		}
 		this.root = parent.createDiv({ cls: 'shelf-tree' });
 		this.root.setAttribute('role', 'tree');
 		this.root.setAttribute('aria-label', `${shelf.name} folders`);
@@ -57,6 +66,85 @@ export class ShelfTree {
 		this.root.addEventListener('keydown', (event) => this.onKeyDown(event));
 		this.currentShelf = shelf;
 		this.refresh();
+	}
+
+	getNavigationState(): Record<string, { expanded: string[]; focused: string | null }> {
+		const result: Record<string, { expanded: string[]; focused: string | null }> = {};
+		for (const [id, paths] of this.expandedByShelf) {
+			result[id] = { expanded: [...paths], focused: this.focusedByShelf.get(id) ?? null };
+		}
+		return result;
+	}
+
+	scrollToSavedFocus(): void {
+		const item = this.getVisibleItems().find((candidate) => candidate.dataset.path === this.focusedPath);
+		item?.scrollIntoView({ block: 'nearest' });
+	}
+
+	setNavigationState(state: unknown): void {
+		this.expandedByShelf.clear();
+		this.focusedByShelf.clear();
+		if (typeof state !== 'object' || state === null || Array.isArray(state)) return;
+		for (const [id, value] of Object.entries(state as Record<string, unknown>)) {
+			if (typeof value !== 'object' || value === null || !('expanded' in value)) continue;
+			const expanded = value.expanded;
+			if (!Array.isArray(expanded)) continue;
+			this.expandedByShelf.set(id, new Set(expanded.filter((path): path is string => typeof path === 'string')));
+			if ('focused' in value && typeof value.focused === 'string') this.focusedByShelf.set(id, value.focused);
+		}
+		if (this.currentShelf) {
+			this.expanded.clear();
+			for (const path of this.expandedByShelf.get(this.currentShelf.id) ?? []) this.expanded.add(path);
+			this.focusedPath = this.focusedByShelf.get(this.currentShelf.id) ?? null;
+		}
+	}
+
+	/** Keep saved expansion and focus paths valid after vault folder moves. */
+	remapPath(oldPath: string, newPath: string): void {
+		let changed = false;
+		for (const [id, paths] of this.expandedByShelf) {
+			if ([...paths].some((path) => path === oldPath || path.startsWith(oldPath + '/'))) changed = true;
+			this.expandedByShelf.set(id, new Set([...paths].map((path) =>
+				path === oldPath || path.startsWith(oldPath + '/')
+					? newPath + path.slice(oldPath.length) : path,
+			)));
+		}
+		for (const [id, path] of this.focusedByShelf) {
+			if (path === oldPath || path.startsWith(oldPath + '/')) {
+				this.focusedByShelf.set(id, newPath + path.slice(oldPath.length));
+				changed = true;
+			}
+		}
+		if (!changed) return;
+		if (this.currentShelf) {
+			this.expanded.clear();
+			for (const path of this.expandedByShelf.get(this.currentShelf.id) ?? []) this.expanded.add(path);
+			this.focusedPath = this.focusedByShelf.get(this.currentShelf.id) ?? null;
+		}
+		this.onNavigationChange();
+	}
+
+	dropPath(path: string): void {
+		let changed = false;
+		for (const [id, paths] of this.expandedByShelf) {
+			if ([...paths].some((candidate) => candidate === path || candidate.startsWith(path + '/'))) changed = true;
+			this.expandedByShelf.set(id, new Set([...paths].filter((candidate) =>
+				candidate !== path && !candidate.startsWith(path + '/'),
+			)));
+		}
+		for (const [id, focused] of this.focusedByShelf) {
+			if (focused === path || focused.startsWith(path + '/')) {
+				this.focusedByShelf.delete(id);
+				changed = true;
+			}
+		}
+		if (!changed) return;
+		if (this.currentShelf) {
+			this.expanded.clear();
+			for (const candidate of this.expandedByShelf.get(this.currentShelf.id) ?? []) this.expanded.add(candidate);
+			this.focusedPath = this.focusedByShelf.get(this.currentShelf.id) ?? null;
+		}
+		this.onNavigationChange();
 	}
 
 	/** Capture focus before ShelfView replaces the whole view. */
@@ -84,8 +172,27 @@ export class ShelfTree {
 
 	/** Reveal a linked folder after a quick note is created inside it. */
 	expandFolder(path: string): void {
-		this.expanded.add(path);
+		this.expandAncestors(path);
 		this.refresh();
+	}
+
+	private expandAncestors(path: string): void {
+		let current = path;
+		while (current) {
+			this.expanded.add(current);
+			const parent = current.lastIndexOf('/');
+			if (parent < 0) break;
+			current = current.slice(0, parent);
+		}
+		this.saveNavigationState();
+	}
+
+	private saveNavigationState(): void {
+		const id = this.currentShelf?.id;
+		if (!id) return;
+		this.expandedByShelf.set(id, new Set(this.expanded));
+		if (this.focusedPath) this.focusedByShelf.set(id, this.focusedPath);
+		this.onNavigationChange();
 	}
 
 	/** Re-render the tree into its existing root, without touching the parent view. */
@@ -99,7 +206,9 @@ export class ShelfTree {
 		const focusedPath = this.getFocusedPath();
 		root.empty();
 
-		if (shelf.folders.length === 0) {
+		if (shelf.kind === 'tag') {
+			this.renderTagResults(root, shelf);
+		} else if (shelf.folders.length === 0) {
 			root.createEl('p', {
 				text: 'No folders linked yet.',
 				cls: 'shelf-view-empty-hint',
@@ -120,6 +229,31 @@ export class ShelfTree {
 		if (tabStop) this.setTabStop(tabStop);
 		if (scrollContainer) scrollContainer.scrollTop = scrollTop;
 		if (focusedPath !== null && tabStop) this.focusItem(tabStop, true);
+	}
+
+	private renderTagResults(root: HTMLElement, shelf: Shelf): void {
+		const tag = shelf.tag?.toLowerCase();
+		if (!tag) return;
+		const files = this.app.vault.getMarkdownFiles()
+			.filter((file) => {
+				const cache = this.app.metadataCache.getFileCache(file);
+				return cache !== null && (getAllTags(cache) ?? [])
+					.some((candidate) => candidate.toLowerCase() === tag);
+			})
+			.sort((a, b) => a.path.localeCompare(b.path));
+		if (files.length === 0) {
+			root.createEl('p', { text: `No notes with ${shelf.tag}.`, cls: 'shelf-view-empty-hint' });
+			return;
+		}
+		let lastParent: string | null = null;
+		for (const file of files) {
+			const parent = file.parent?.path ?? '';
+			if (parent !== lastParent) {
+				root.createDiv({ text: parent || 'Vault root', cls: 'shelf-tree-group-heading' });
+				lastParent = parent;
+			}
+			this.renderFile(root, file, 0, true);
+		}
 	}
 
 	// --- Rendering ----------------------------------------------------------
@@ -172,6 +306,7 @@ export class ShelfTree {
 			} else {
 				this.expanded.add(folder.path);
 			}
+			this.saveNavigationState();
 			this.refresh();
 		});
 
@@ -191,18 +326,19 @@ export class ShelfTree {
 		}
 	}
 
-	private renderFile(parent: HTMLElement, file: TFile, depth: number): void {
+	private renderFile(parent: HTMLElement, file: TFile, depth: number, forceShow = false): void {
 		const settings = this.shelfManager.getSettings();
-		if (!settings.showFiles) return;
+		if (!forceShow && !settings.showFiles) return;
 		if (
+			!forceShow &&
 			settings.fileExtensions.length > 0 &&
-			!settings.fileExtensions.includes(file.extension)
+			!settings.fileExtensions.includes(file.extension.toLowerCase())
 		) {
 			return;
 		}
 
 		const item = parent.createDiv({ cls: 'shelf-tree-item is-file' });
-		const displayName = file.extension === 'md' ? file.basename : file.name;
+		const displayName = file.extension.toLowerCase() === 'md' ? file.basename : file.name;
 		this.prepareItem(item, file.path, displayName, depth);
 		const row = item.createDiv({ cls: 'shelf-tree-item-row' });
 
@@ -267,6 +403,9 @@ export class ShelfTree {
 			candidate.tabIndex = candidate === item ? 0 : -1;
 		}
 		this.focusedPath = item.dataset.path ?? null;
+		if (this.currentShelf && this.focusedPath !== this.focusedByShelf.get(this.currentShelf.id)) {
+			this.saveNavigationState();
+		}
 	}
 
 	private focusItem(item: HTMLElement, preventScroll = false): void {
@@ -420,6 +559,12 @@ export class ShelfTree {
 					new RenameFileModal(this.app, folder).open();
 				}),
 		);
+		if (!isLinkedRoot && this.currentShelf?.kind === 'folders') {
+			menu.addItem((item) => item.setTitle('Move to…').setIcon('folder-input').onClick(() => {
+				const shelf = this.currentShelf;
+				if (shelf) new MoveVaultItemModal(this.app, folder, shelf, (path) => this.expandFolder(path)).open();
+			}));
+		}
 
 		menu.addItem((item) =>
 			item
@@ -512,6 +657,12 @@ export class ShelfTree {
 					new RenameFileModal(this.app, file).open();
 				}),
 		);
+		if (this.currentShelf?.kind === 'folders') {
+			menu.addItem((item) => item.setTitle('Move to…').setIcon('folder-input').onClick(() => {
+				const shelf = this.currentShelf;
+				if (shelf) new MoveVaultItemModal(this.app, file, shelf, (path) => this.expandFolder(path)).open();
+			}));
+		}
 
 		menu.addItem((item) =>
 			item
